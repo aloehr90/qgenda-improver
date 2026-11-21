@@ -1,0 +1,7 @@
+name = "qgenda-improver"
+main = "index.js"
+compatibility_date = "2026-11-01"
+
+# Don't record request URLs: they contain each user's QGenda key.
+[observability]
+enabled = false

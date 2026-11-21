@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QGenda Improver</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1f24; --muted:#5b6670; --line:#d5dbe1; --accent:#0a6cff; --card:#f6f8fa; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171a; --fg:#e8ecef; --muted:#95a0aa; --line:#2c333a; --accent:#5aa2ff; --card:#1c2126; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 -apple-system,system-ui,sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin-top: 0; }
+  label { display:block; font-weight:600; margin: 20px 0 6px; }
+  input[type=text], input[type=number] { width:100%; padding:10px 12px; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  .hint { color: var(--muted); font-size: .875rem; margin-top: 4px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .check { display:flex; gap:8px; align-items:center; font-weight:400; margin-top: 16px; }
+  button, a.btn { display:inline-block; padding:10px 16px; font:inherit; font-weight:600; color:#fff; background:var(--accent); border:0; border-radius:8px; text-decoration:none; cursor:pointer; }
+  button.secondary { background:var(--card); color:var(--fg); border:1px solid var(--line); }
+  #result { display:none; margin-top: 28px; padding: 16px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  #result code { display:block; word-break:break-all; margin: 8px 0 12px; font-size:.8125rem; }
+  #err { color:#d1242f; margin-top:12px; min-height:1.5em; }
+  .warn { font-size:.875rem; color:var(--muted); border-left:3px solid var(--line); padding-left:12px; margin-top:24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>QGenda Improver</h1>
+  <p class="lead">Adds each shift's hospital location and travel time to your QGenda calendar, so your iPhone can send "Time to Leave" alerts.</p>
+
+  <label for="src">Your QGenda calendar subscription URL</label>
+  <input id="src" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://app.qgenda.com/ical?key=…">
+  <div class="hint">In QGenda, copy the iCal subscription link for your schedule.</div>
+
+  <label for="early">Arrive early by (minutes)</label>
+  <input id="early" type="number" min="0" max="240" step="5" value="30">
+  <div class="hint">The calendar event starts this much earlier than your shift. The real shift time is added to the event notes.</div>
+
+  <label class="check"><input id="travel" type="checkbox" checked> Enable "Time to Leave" travel-time alerts</label>
+
+  <p><button id="go">Create my link</button></p>
+  <div id="err" role="alert"></div>
+
+  <section id="result">
+    <strong>Your new calendar link</strong>
+    <code id="link"></code>
+    <div class="row">
+      <a class="btn" id="subscribe" href="#">Subscribe on iPhone</a>
+      <button class="secondary" id="copy" type="button">Copy link</button>
+    </div>
+    <div class="hint" style="margin-top:12px">Tap <em>Subscribe</em> on your iPhone and confirm in Calendar. Or in Calendar, choose Add Calendar → Add Subscription Calendar and paste the link. Remove your old QGenda subscription afterward to avoid duplicates.</div>
+  </section>
+
+  <p class="warn">Your QGenda link works like a password for your schedule, and the new link contains it. Don't share the new link publicly. Nothing is stored on a server; the link carries your settings.</p>
+</main>
+<script>
+  // Set to your deployed Worker address (no trailing slash).
+  const WORKER = "https://qgenda-improver.aloehr.workers.dev";
+  const $ = (id) => document.getElementById(id);
+
+  function extractKey(input) {
+    const m = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(input.trim());
+    return m ? m[0].toLowerCase() : null;
+  }
+
+  $("go").addEventListener("click", () => {
+    $("err").textContent = "";
+    const key = extractKey($("src").value);
+    if (!key || !/qgenda\.com/i.test($("src").value)) {
+      $("err").textContent = "That doesn't look like a QGenda subscription URL (it should contain ?key=…).";
+      return;
+    }
+    const early = parseInt($("early").value, 10);
+    if (!(early >= 0 && early <= 240)) { $("err").textContent = "Enter an early-arrival time between 0 and 240 minutes."; return; }
+
+    const params = new URLSearchParams({ k: key, early: String(early) });
+    if (!$("travel").checked) params.set("travel", "0");
+    const https = `${WORKER}/cal?${params}`;
+    $("link").textContent = https;
+    $("subscribe").href = https.replace(/^https:/, "webcal:");
+    $("result").style.display = "block";
+    $("copy").textContent = "Copy link";
+    $("copy").onclick = async () => {
+      try { await navigator.clipboard.writeText(https); $("copy").textContent = "Copied"; }
+      catch { $("err").textContent = "Couldn't copy automatically. Select the link above and copy it."; }
+    };
+  });
+</script>
+</body>
+</html>
