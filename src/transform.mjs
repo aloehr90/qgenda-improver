@@ -40,20 +40,33 @@ function parseUtc(s) {
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
 }
 
-export function findSite(summary, config) {
+/** Returns { site, rule } for the first matching rule, or null if none match or the rule opts out. */
+export function findRule(summary, config) {
   for (const rule of config.rules) {
-    if (new RegExp(rule.match).test(summary)) return rule.site ? config.sites[rule.site] : null;
+    if (new RegExp(rule.match).test(summary)) {
+      return rule.site ? { site: config.sites[rule.site], rule } : null;
+    }
   }
   return null;
 }
 
+// "N N-7p 7p-3a [Loehr]" -> "Nampa 7p-3a". Falls back to the original minus the "[Name]" suffix.
+export function shortTitle(summary, site, rule) {
+  const clean = summary.replace(/\s*\[[^\]]*\]\s*$/, "");
+  const hours = /\b(\d{1,2}(?::\d{2})?[ap])-(\d{1,2}(?::\d{2})?[ap])\b/.exec(clean);
+  if (!hours) return clean;
+  return `${rule.label ?? site.short} ${hours[1]}-${hours[2]}`;
+}
+
 /**
- * options.earlyMinutes: shift the event start earlier by this many minutes.
+ * options.earlyMinutes: shift the event start earlier by this many minutes (not for rules with noEarly).
  * options.travel: add Apple's automatic travel-time advisory (drives "Time to Leave").
+ * options.alertMinutes: if > 0, add a reminder this many minutes before the (shifted) event start.
  * options.onlyAfter: Date; if set, events starting before it are dropped (for test files).
  */
 export function transformIcs(icsText, config, options = {}) {
-  const { earlyMinutes = 0, travel = true, onlyAfter = null } = options;
+  const { earlyMinutes = 0, travel = true, alertMinutes = 0, onlyAfter = null } = options;
+  const opts = { earlyMinutes, travel, alertMinutes, onlyAfter };
   const lines = unfold(icsText).split(/\r?\n/).filter((l) => l.length);
   const out = [];
   let ev = null;
@@ -64,7 +77,7 @@ export function transformIcs(icsText, config, options = {}) {
       continue;
     }
     if (line === "END:VEVENT") {
-      const processed = processEvent(ev, config, { earlyMinutes, travel, onlyAfter });
+      const processed = processEvent(ev, config, opts);
       if (processed) out.push("BEGIN:VEVENT", ...processed, "END:VEVENT");
       ev = null;
       continue;
@@ -75,37 +88,50 @@ export function transformIcs(icsText, config, options = {}) {
   return out.map(fold).join("\r\n") + "\r\n";
 }
 
-function processEvent(props, config, { earlyMinutes, travel, onlyAfter }) {
+function processEvent(props, config, { earlyMinutes, travel, alertMinutes, onlyAfter }) {
   const get = (name) => props.find((p) => p.startsWith(name + ":"))?.slice(name.length + 1);
   const summary = get("SUMMARY") ?? "";
   const startRaw = get("DTSTART");
   const start = startRaw ? parseUtc(startRaw) : null;
   if (onlyAfter && start && start < onlyAfter) return null;
 
-  const site = findSite(summary, config);
-  if (!site) return props; // unmatched or intentionally left alone
+  const found = findRule(summary, config);
+  if (!found) return props; // unmatched or intentionally left alone
+  const { site, rule } = found;
 
+  const early = rule.noEarly ? 0 : earlyMinutes;
+  const title = shortTitle(summary, site, rule);
+  const hhmm = (d) =>
+    d.toLocaleTimeString("en-US", { timeZone: "America/Boise", hour: "numeric", minute: "2-digit" });
+
+  // Drop what we replace, then re-add it below.
   let result = props.filter(
-    (p) => !/^(LOCATION|X-APPLE-STRUCTURED-LOCATION|X-APPLE-TRAVEL-ADVISORY-BEHAVIOR)[:;]/.test(p),
+    (p) =>
+      !/^(LOCATION|X-APPLE-STRUCTURED-LOCATION|X-APPLE-TRAVEL-ADVISORY-BEHAVIOR|TRANSP|X-MICROSOFT-CDO-BUSYSTATUS)[:;]/.test(p),
   );
 
-  if (earlyMinutes > 0 && start) {
-    const early = new Date(start.getTime() - earlyMinutes * 60000);
-    const hhmm = (d) =>
-      d.toLocaleTimeString("en-US", { timeZone: "America/Boise", hour: "numeric", minute: "2-digit" });
-    result = result.map((p) => {
-      if (p.startsWith("DTSTART:")) return `DTSTART:${fmtUtc(early)}`;
-      if (p.startsWith("DESCRIPTION:")) {
-        return `DESCRIPTION:Shift starts ${hhmm(start)} (arrive ${earlyMinutes} min early)\\n` + p.slice("DESCRIPTION:".length);
-      }
-      return p;
-    });
+  const notes = [];
+  if (early > 0 && start) notes.push(`Shift starts ${hhmm(start)} (arrive ${early} min early)`);
+  if (title !== summary) notes.push(`QGenda: ${summary}`);
+
+  result = result.map((p) => {
+    if (p.startsWith("SUMMARY:")) return `SUMMARY:${esc(title)}`;
+    if (p.startsWith("DTSTART:") && early > 0 && start) return `DTSTART:${fmtUtc(new Date(start.getTime() - early * 60000))}`;
+    if (p.startsWith("DESCRIPTION:") && notes.length) return `DESCRIPTION:${notes.map(esc).join("\\n")}\\n${p.slice("DESCRIPTION:".length)}`;
+    return p;
+  });
+  if (notes.length && !result.some((p) => p.startsWith("DESCRIPTION:"))) {
+    result.push(`DESCRIPTION:${notes.map(esc).join("\\n")}`);
   }
 
+  result.push("TRANSP:OPAQUE", "X-MICROSOFT-CDO-BUSYSTATUS:BUSY");
   result.push(`LOCATION:${esc(site.title)}\\n${esc(site.address)}`);
   result.push(
     `X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS="${site.address}";X-APPLE-RADIUS=100;X-TITLE="${site.title}":geo:${site.lat},${site.lon}`,
   );
   if (travel) result.push("X-APPLE-TRAVEL-ADVISORY-BEHAVIOR:AUTO");
+  if (alertMinutes > 0) {
+    result.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc(title)}`, `TRIGGER:-PT${alertMinutes}M`, "END:VALARM");
+  }
   return result;
 }

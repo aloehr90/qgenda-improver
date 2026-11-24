@@ -5,47 +5,86 @@
       "title": "St. Luke's Boise Emergency Department",
       "address": "190 E Bannock St, Boise, ID 83712",
       "lat": 43.6130555,
-      "lon": -116.1931367
+      "lon": -116.1931367,
+      "short": "Boise"
     },
     "meridian": {
       "title": "St. Luke's Meridian Emergency Department",
       "address": "520 S Eagle Rd, Meridian, ID 83642",
       "lat": 43.5993871,
-      "lon": -116.3522806
+      "lon": -116.3522806,
+      "short": "Meridian"
     },
     "nampa": {
       "title": "St. Luke's Nampa Emergency Department",
       "address": "9850 W St Luke's Dr, Nampa, ID 83687",
       "lat": 43.6179513,
-      "lon": -116.5906668
+      "lon": -116.5906668,
+      "short": "Nampa"
     },
     "fruitland": {
       "title": "St. Luke's Fruitland Emergency Department",
       "address": "1210 NW 16th St, Fruitland, ID 83619",
       "lat": 44.0240634,
-      "lon": -116.9296373
+      "lon": -116.9296373,
+      "short": "Fruitland"
     },
     "elmore": {
       "title": "St. Luke's Elmore Emergency Department",
       "address": "895 N 6th E, Mountain Home, ID 83647",
       "lat": 43.1387307,
-      "lon": -115.6934346
+      "lon": -115.6934346,
+      "short": "Elmore"
     },
     "board": {
       "title": "Board Meeting",
       "address": "3080 E Gentry Way, Meridian, ID 83642",
       "lat": 43.5985284,
-      "lon": -116.3568914
+      "lon": -116.3568914,
+      "short": "Board Meeting"
     }
   },
   "rules": [
-    { "match": "^Peer Review", "site": "boise" },
-    { "match": "^Board Mtg", "site": "board" },
-    { "match": "^B Ped2Night", "site": null },
-    { "match": "^B ", "site": "boise" },
-    { "match": "^M ", "site": "meridian" },
-    { "match": "^N ", "site": "nampa" },
-    { "match": "^F ", "site": "fruitland" },
-    { "match": "^E ", "site": "elmore" }
+    {
+      "match": "^Peer Review",
+      "site": "boise",
+      "label": "Peer Review",
+      "noEarly": true
+    },
+    {
+      "match": "^Board Mtg",
+      "site": "board",
+      "label": "Board Meeting",
+      "noEarly": true
+    },
+    {
+      "match": "^B Ped2Night",
+      "site": null
+    },
+    {
+      "match": "^B Trauma",
+      "site": "boise",
+      "label": "Boise Trauma"
+    },
+    {
+      "match": "^B ",
+      "site": "boise"
+    },
+    {
+      "match": "^M ",
+      "site": "meridian"
+    },
+    {
+      "match": "^N ",
+      "site": "nampa"
+    },
+    {
+      "match": "^F ",
+      "site": "fruitland"
+    },
+    {
+      "match": "^E ",
+      "site": "elmore"
+    }
   ]
 }

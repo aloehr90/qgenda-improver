@@ -13,7 +13,7 @@
   h1 { font-size: 1.5rem; margin: 0 0 4px; }
   p.lead { color: var(--muted); margin-top: 0; }
   label { display:block; font-weight:600; margin: 20px 0 6px; }
-  input[type=text], input[type=number] { width:100%; padding:10px 12px; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  input[type=text], input[type=number], select { width:100%; padding:10px 12px; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:8px; }
   .hint { color: var(--muted); font-size: .875rem; margin-top: 4px; }
   .row { display:flex; gap:8px; align-items:center; }
   .check { display:flex; gap:8px; align-items:center; font-weight:400; margin-top: 16px; }
@@ -40,6 +40,17 @@
 
   <label class="check"><input id="travel" type="checkbox" checked> Enable "Time to Leave" travel-time alerts</label>
 
+  <label for="alert">Extra reminder (optional)</label>
+  <select id="alert">
+    <option value="0" selected>None</option>
+    <option value="30">30 minutes before</option>
+    <option value="60">1 hour before</option>
+    <option value="120">2 hours before</option>
+    <option value="720">12 hours before</option>
+    <option value="1440">1 day before</option>
+  </select>
+  <div class="hint">A separate reminder before the event starts, in addition to Time to Leave.</div>
+
   <p><button id="go">Create my link</button></p>
   <div id="err" role="alert"></div>
 
@@ -52,6 +63,17 @@
     </div>
     <div class="hint" style="margin-top:12px">Tap <em>Subscribe</em> on your iPhone and confirm in Calendar. Or in Calendar, choose Add Calendar → Add Subscription Calendar and paste the link. Remove your old QGenda subscription afterward to avoid duplicates.</div>
   </section>
+
+  <details style="margin-top:24px">
+    <summary><strong>Not getting "Time to Leave" alerts?</strong></summary>
+    <ul class="hint">
+      <li>Settings → Privacy &amp; Security → Location Services → <em>Calendar</em>: set to While Using or Always, with <em>Precise Location</em> on.</li>
+      <li>Settings → Notifications → <em>Calendar</em> must be allowed.</li>
+      <li>Open a shift in Calendar. It should show a location and a <em>Travel Time</em> row. If not, wait for the subscription to refresh (up to a few hours) or remove and re-add it.</li>
+      <li>iOS only starts counting travel time when the event is a few hours away, so don't expect an alert days ahead.</li>
+      <li>Shifts whose code isn't recognized (or reminders like "Ped2Night") are passed through unchanged.</li>
+    </ul>
+  </details>
 
   <p class="warn">Your QGenda link works like a password for your schedule, and the new link contains it. Don't share the new link publicly. Nothing is stored on a server; the link carries your settings.</p>
 </main>
@@ -77,6 +99,7 @@
 
     const params = new URLSearchParams({ k: key, early: String(early) });
     if (!$("travel").checked) params.set("travel", "0");
+    if ($("alert").value !== "0") params.set("alert", $("alert").value);
     const https = `${WORKER}/cal?${params}`;
     $("link").textContent = https;
     $("subscribe").href = https.replace(/^https:/, "webcal:");

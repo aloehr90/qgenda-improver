@@ -20,6 +20,8 @@ export async function handle(request, fetchImpl = fetch) {
   const early = Number(url.searchParams.get("early") ?? "0");
   if (!Number.isInteger(early) || early < 0 || early > 240) return text("early must be a whole number of minutes, 0-240.", 400);
   const travel = url.searchParams.get("travel") !== "0";
+  const alertMinutes = Number(url.searchParams.get("alert") ?? "0");
+  if (!Number.isInteger(alertMinutes) || alertMinutes < 0 || alertMinutes > 2880) return text("alert must be a whole number of minutes, 0-2880.", 400);
 
   let upstream;
   try {
@@ -27,15 +29,16 @@ export async function handle(request, fetchImpl = fetch) {
       redirect: "manual", // never follow redirects; a 3xx is treated as failure below
       cf: { cacheTtl: 300, cacheEverything: true },
     });
-  } catch (e) {
-    return text(`Could not reach QGenda (${e?.name}: ${e?.message}).`, 502);
+  } catch {
+    // Deliberately generic: error text for a failed fetch can include the request URL, which holds the key.
+    return text("Could not reach QGenda.", 502);
   }
   if (!upstream.ok) return text(`QGenda returned ${upstream.status}. Check that the key is correct.`, 502);
 
   const body = await upstream.text();
   if (body.length > MAX_BYTES || !body.startsWith("BEGIN:VCALENDAR")) return text("QGenda did not return a calendar.", 502);
 
-  const out = transformIcs(body, config, { earlyMinutes: early, travel });
+  const out = transformIcs(body, config, { earlyMinutes: early, travel, alertMinutes });
   return new Response(request.method === "HEAD" ? null : out, {
     headers: {
       "content-type": "text/calendar; charset=utf-8",
